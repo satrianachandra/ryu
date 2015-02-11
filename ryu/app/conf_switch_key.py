@@ -16,3 +16,4 @@
 
 OVSDB_ADDR = 'ovsdb_addr'               # value <method>:<ip>[:<port>]
 OVS_TUNNEL_ADDR = 'ovs_tunnel_addr'     # ip address of tunnel
+UNIX_SOCKET = 'unix_socket'	# unix socket of the sofswitch13
