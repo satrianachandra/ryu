@@ -41,7 +41,7 @@ class SimpleSwitch12(app_manager.RyuApp):
                 ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
         mod = datapath.ofproto_parser.OFPFlowMod(
-            datapath=datapath, cookie=0, cookie_mask=0, table_id=0,
+            datapath=datapath, cookie=0, cookie_mask=0,
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
             priority=0, buffer_id=ofproto.OFP_NO_BUFFER,
             out_port=ofproto.OFPP_ANY,
