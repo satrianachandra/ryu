@@ -1,4 +1,4 @@
-##
+## REST API for of12softwitch QoS configuration
 
 import logging
 import json
@@ -29,7 +29,7 @@ from ryu.ofproto import ether
 from ryu.ofproto import inet
 
 
-from mininet.util import quietRun
+#from mininet.util import quietRun
 import subprocess
 
 # =============================
@@ -54,17 +54,14 @@ import subprocess
 #
 # request body format:
 #  {"port_name":"<name of port>",
-#   "type": "<linux-htb or linux-other>",
-#   "max-rate": "<int>",
-#   "queues":[{"max_rate": "<int>", "min_rate": "<int>"},...]}
+#   "queues":[{"min_rate": "<int>"},...]}
 #
 #   Note: This operation override
 #         previous configurations.
 #   Note: Queue configurations are available for
-#         OpenvSwitch.
-#   Note: port_name is optional argument.
-#         If does not pass the port_name argument,
-#         all ports are target for configuration.
+#         of12softswitch.
+#   Note: port_name is a required argument.
+#	todo:see if setting setting max_rate is possible
 #
 # delete queue
 # DELETE /qos/queue/{swtich-id}
@@ -72,6 +69,12 @@ import subprocess
 #   Note: This operation delete relation of qos record from
 #         qos colum in Port table. Therefore,
 #         QoS records and Queue records will remain.
+#
+# todo:update queue config
+# PUT /qos/queue/{switch-id}/{port}/{queue-id}
+#
+#
+#
 #
 # about qos rules
 #
@@ -303,8 +306,6 @@ class RestQoSAPI(app_manager.RyuApp):
 
     @set_ev_cls(conf_switch.EventConfSwitchDel)
     def conf_switch_del_handler(self, ev):
-        #if ev.key == cs_key.OVSDB_ADDR:
-        #    QoSController.delete_ovsdb_addr(ev.dpid)
         if ev.key == cs_key.UNIX_SOCKET:
             QoSController.delete_unix_socket(ev.dpid)
         else:
@@ -419,17 +420,6 @@ class QoSController(ControllerBase):
     def delete_unix_socket(dpid):
         ofs = QoSController._OFS_LIST.get(dpid, None)
         ofs.set_unix_socket(dpid, None)
-
-    @staticmethod
-    def set_ovsdb_addr(dpid, value):
-        ofs = QoSController._OFS_LIST.get(dpid, None)
-        if ofs is not None:
-            ofs.set_ovsdb_addr(dpid, value)
-
-    @staticmethod
-    def delete_ovsdb_addr(dpid):
-        ofs = QoSController._OFS_LIST.get(dpid, None)
-        ofs.set_ovsdb_addr(dpid, None)
 
     @route('qos_switch', BASE_URL + '/queue/{switchid}',
            methods=['GET'], requirements=REQUIREMENTS)
@@ -563,8 +553,6 @@ class QoS(object):
         self.version = dp.ofproto.OFP_VERSION
         self.queue_list = {}
         self.CONF = CONF
-        self.ovsdb_addr = None
-        self.ovs_bridge = None
 
         self.unix_socket = None
 
@@ -597,27 +585,6 @@ class QoS(object):
             self.unix_socket = None
             return
         self.unix_socket = unix_socket
-
-    def set_ovsdb_addr(self, dpid, ovsdb_addr):
-        # easy check if the address format valid
-        _proto, _host, _port = ovsdb_addr.split(':')
-
-        old_address = self.ovsdb_addr
-        if old_address == ovsdb_addr:
-            return
-        if ovsdb_addr is None:
-            if self.ovs_bridge:
-                self.ovs_bridge.del_controller()
-                self.ovs_bridge = None
-            return
-        self.ovsdb_addr = ovsdb_addr
-        if self.ovs_bridge is None:
-            ovs_bridge = bridge.OVSBridge(self.CONF, dpid, ovsdb_addr)
-            self.ovs_bridge = ovs_bridge
-            try:
-                ovs_bridge.init()
-            except:
-                raise ValueError('ovsdb addr is not available.')
 
     def _update_vlan_list(self, vlan_list):
         for vlan_id in self.vlan_list.keys():
@@ -687,20 +654,21 @@ class QoS(object):
             return REST_COMMAND_RESULT, msg
 
         self.queue_list.clear()
-        #queue_type = rest.get(REST_QUEUE_TYPE, 'linux-htb')
-        #parent_max_rate = rest.get(REST_QUEUE_MAX_RATE, None)
         queues = rest.get(REST_QUEUES, [])
         queue_id = 1
         queue_config = []
         
         port_name = rest.get(REST_PORT_NAME, None)
-        
+        if port_name is None:
+        	raise ValueError('Required to specify port_name')
+
+        #todo:need checking if the port exists
 
         for queue in queues:
             #max_rate = queue.get(REST_QUEUE_MAX_RATE, None)
             min_rate = queue.get(REST_QUEUE_MIN_RATE, None)
             if min_rate is None:
-                raise ValueError('Required to specify min_rate')
+                raise ValueError('Required to specify min_rate\n')
             config = {}
             if min_rate is not None:
                 config['min-rate'] = min_rate
@@ -709,27 +677,13 @@ class QoS(object):
             config['port no.'] = port_name
 
             self.queue_list[queue_id] = {'config': config}
-            cmd = 'sudo dpctl ' + 'unix:'+ self.unix_socket + ' queue-mod %s %d %s' % (port_name, queue_id, min_rate)
-            LOG.info(cmd)
-            subprocess.call(cmd, shell=True)
+            cmd = 'dpctl ' + 'unix:'+ self.unix_socket + ' queue-mod %s %d %s' % (port_name, queue_id, min_rate)
+            #LOG.info(cmd)
+            ret = subprocess.call(cmd, shell=True)
+            if ret != 0:
+            	raise ValueError('Need root permission')
             queue_id += 1
             
-        
-        #vif_ports = self.ovs_bridge.get_port_name_list()
-
-        #if port_name is not None:
-        #    if port_name not in vif_ports:
-        #        raise ValueError('%s port is not exists' % port_name)
-        #    vif_ports = [port_name
-
-
-        #for port_name in vif_ports:
-        #    try:
-        #        self.ovs_bridge.set_qos(port_name, type=queue_type,
-        #                                max_rate=parent_max_rate,
-        #                                queues=queue_config)
-        #    except Exception, msg:
-        #        raise ValueError(msg)
 
         msg = {'result': 'success',
                'details': self.queue_list}
@@ -737,18 +691,13 @@ class QoS(object):
         return REST_COMMAND_RESULT, msg
 
     def _delete_queue(self):
-        #if self.ovs_bridge is None:
-        #    return False
-
-        #vif_ports = self.ovs_bridge.get_external_ports()
-        #for port in vif_ports:
-        #    self.ovs_bridge.del_qos(port.port_name)
-
+        
         for queue_id in self.queue_list:
             port_no = self.queue_list[queue_id]["config"]["port no."]
             cmd = 'sudo dpctl ' + 'unix:' + self.unix_socket + ' queue-del %s %d' % (port_no, queue_id)
-            LOG.info(cmd)
-            subprocess.call(cmd, shell=True)
+            ret = subprocess.call(cmd, shell=True)
+            if ret != 0:
+            	return False
 
         return True
 
