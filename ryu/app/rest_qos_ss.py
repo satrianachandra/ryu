@@ -55,7 +55,7 @@ import subprocess
 # request body format:
 #  {"port_name":"<name of port>",
 #   "queues":[{"min_rate": "<int>"},...]}
-#
+#  
 #   Note: This operation override
 #         previous configurations.
 #   Note: Queue configurations are available for
@@ -69,12 +69,6 @@ import subprocess
 #   Note: This operation delete relation of qos record from
 #         qos colum in Port table. Therefore,
 #         QoS records and Queue records will remain.
-#
-# todo:update queue config
-# PUT /qos/queue/{switch-id}/{port}/{queue-id}
-#
-#
-#
 #
 # about qos rules
 #
@@ -177,6 +171,7 @@ import subprocess
 
 SWITCHID_PATTERN = dpid_lib.DPID_PATTERN + r'|all'
 VLANID_PATTERN = r'[0-9]{1,4}|all'
+numbers_pattern = r'\d+'
 
 QOS_TABLE_ID = 0
 
@@ -187,6 +182,7 @@ REST_PRIORITY = 'priority'
 REST_VLANID = 'vlan_id'
 REST_DL_VLAN = 'dl_vlan'
 REST_PORT_NAME = 'port_name'
+REST_QUEUE_ID = 'id'
 REST_QUEUE_TYPE = 'type'
 REST_QUEUE_MAX_RATE = 'max_rate'
 REST_QUEUE_MIN_RATE = 'min_rate'
@@ -242,6 +238,13 @@ COOKIE_SHIFT_VLANID = 32
 BASE_URL = '/qos'
 REQUIREMENTS = {'switchid': SWITCHID_PATTERN,
                 'vlanid': VLANID_PATTERN}
+
+REQUIREMENTS_SINGLE = {'switchid': SWITCHID_PATTERN,
+                'vlanid': VLANID_PATTERN,
+                'portid': numbers_pattern,
+                'queueid':numbers_pattern
+                }
+
 
 LOG = logging.getLogger(__name__)
 
@@ -439,6 +442,13 @@ class QoSController(ControllerBase):
         return self._access_switch(req, switchid, VLANID_NONE,
                                    'delete_queue', None)
 
+    @route('qos_switch', BASE_URL + '/queue/{switchid}/{portid}/{queueid}',
+           methods=['DELETE'], requirements=REQUIREMENTS_SINGLE)
+    def delete_queue_single(self, req, switchid,portid,queueid, **_kwargs):
+        return self._access_switch(req, switchid, VLANID_NONE,
+                                   'delete_queue_single', None,portid,queueid)
+
+
     @route('qos_switch', BASE_URL + '/queue/status/{switchid}',
            methods=['GET'], requirements=REQUIREMENTS)
     def get_status(self, req, switchid, **_kwargs):
@@ -499,7 +509,7 @@ class QoSController(ControllerBase):
         return self._access_switch(req, switchid, VLANID_NONE,
                                    'delete_meter', self.waiters)
 
-    def _access_switch(self, req, switchid, vlan_id, func, waiters):
+    def _access_switch(self, req, switchid, vlan_id, func, waiters,portid=-1,queueid=-1):
         try:
             rest = json.loads(req.body) if req.body else {}
         except SyntaxError:
@@ -516,10 +526,15 @@ class QoSController(ControllerBase):
         for f_ofs in dps.values():
             function = getattr(f_ofs, func)
             try:
-                if waiters is not None:
-                    msg = function(rest, vid, waiters)
-                else:
-                    msg = function(rest, vid)
+            	if queueid != -1:
+            		#todo: check if the queue exists or not
+            		msg = function(rest, vid,portid,queueid)
+            	else:
+                	if waiters is not None:
+                		msg = function(rest, vid, waiters)
+                	else:
+                		msg = function(rest, vid)
+
             except ValueError, message:
                 return Response(status=400, body=str(message))
             msgs.append(msg)
@@ -655,7 +670,7 @@ class QoS(object):
 
         self.queue_list.clear()
         queues = rest.get(REST_QUEUES, [])
-        queue_id = 1
+        #queue_id = 1
         queue_config = []
         
         port_name = rest.get(REST_PORT_NAME, None)
@@ -667,22 +682,29 @@ class QoS(object):
         for queue in queues:
             #max_rate = queue.get(REST_QUEUE_MAX_RATE, None)
             min_rate = queue.get(REST_QUEUE_MIN_RATE, None)
-            if min_rate is None:
-                raise ValueError('Required to specify min_rate\n')
+            queue_id = queue.get(REST_QUEUE_ID, None)
             config = {}
             if min_rate is not None:
                 config['min-rate'] = min_rate
+            else:
+            	raise ValueError('Required to specify min_rate\n')
+
+            if queue_id is not None:
+                config['id'] = queue_id
+            else:
+            	raise ValueError('Required to specify queue id\n')
+
             if len(config):
                 queue_config.append(config)
             config['port no.'] = port_name
 
             self.queue_list[queue_id] = {'config': config}
-            cmd = 'dpctl ' + 'unix:'+ self.unix_socket + ' queue-mod %s %d %s' % (port_name, queue_id, min_rate)
+            cmd = 'dpctl ' + 'unix:'+ self.unix_socket + ' queue-mod %s %s %s' % (port_name, queue_id, min_rate)
             #LOG.info(cmd)
             ret = subprocess.call(cmd, shell=True)
             if ret != 0:
             	raise ValueError('Need root permission')
-            queue_id += 1
+            #queue_id += 1
             
 
         msg = {'result': 'success',
@@ -694,7 +716,7 @@ class QoS(object):
         
         for queue_id in self.queue_list:
             port_no = self.queue_list[queue_id]["config"]["port no."]
-            cmd = 'sudo dpctl ' + 'unix:' + self.unix_socket + ' queue-del %s %d' % (port_no, queue_id)
+            cmd = 'sudo dpctl ' + 'unix:' + self.unix_socket + ' queue-del %s %s' % (port_no, queue_id)
             ret = subprocess.call(cmd, shell=True)
             if ret != 0:
             	return False
@@ -710,6 +732,23 @@ class QoS(object):
             msg = 'failure'
 
         return REST_COMMAND_RESULT, msg
+
+
+    @rest_command
+    def delete_queue_single(self, rest, switchid,portid,queueid):
+    	if self.unix_socket is None:
+            msg = {'result': 'failed',
+               'details': 'unix socket is not set'}
+            return REST_COMMAND_RESULT, msg
+
+        cmd = 'sudo dpctl ' + 'unix:' + self.unix_socket + ' queue-del %s %s' % (portid, queueid)
+        ret = subprocess.call(cmd, shell=True)
+        if ret != 0: 
+        	msg = 'failure'
+        else:
+        	msg = 'success'
+
+    	return REST_COMMAND_RESULT, msg
 
     @rest_command
     def set_qos(self, rest, vlan_id, waiters):
