@@ -29,7 +29,7 @@ from ryu.ofproto import ether
 from ryu.ofproto import inet
 
 
-#from mininet.util import quietRun
+from mininet.util import quietRun
 import subprocess
 
 # =============================
@@ -644,6 +644,30 @@ class QoS(object):
         msgs = self.ofctl.get_queue_stats(self.dp, waiters)
         return REST_COMMAND_RESULT, msgs
 
+    def getPortsWithQueue(queue_address):
+    	cmd = 'sudo dpctl unix:%s stats-queue' %queue_address
+    	result = quietRun( cmd )
+    	result = re.findall('port="(\d+)", q="(\d+)",', result)
+    	return result
+
+	def getQueueConfigs(portsList):
+		result=[]
+		prev = -1
+		for port,queue_id in portsList:
+			current = port
+			if (current != prev):
+				cmd = 'sudo dpctl unix:/tmp/s1 queue-get-config %d' %int(port)
+				cmdresult = quietRun(cmd)
+				cmdresult = re.findall('q="(\d+)", props=\[minrate\{rate="(\d+)"\}\]', cmdresult)
+				#build the json friendly here
+				anArray=[]
+				for queueID,minrate in cmdresult:
+					adict = {"queue_id":queue_id,"min_rate":minrate}
+					anArray.append(adict)
+				result.append({"port_name": port, "queues":anArray})
+			prev = current
+		return result
+
     @rest_command
     def get_queue(self, rest, vlan_id):
         if self.unix_socket is None:
@@ -651,9 +675,11 @@ class QoS(object):
                'details': 'unix socket is not set'}
             return REST_COMMAND_RESULT, msg
 
-        if len(self.queue_list):
+        portsWithQueue = getPortsWithQueue(self.unix_socket)
+
+        if len(portsWithQueue):
             msg = {'result': 'success',
-                   'details': self.queue_list}
+                   'details': getQueueConfigs(portsWithQueue)}
         else:
            msg = {'result': 'failure',
                    'details': 'Queue is not exists.'}
