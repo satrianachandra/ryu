@@ -644,13 +644,15 @@ class QoS(object):
         msgs = self.ofctl.get_queue_stats(self.dp, waiters)
         return REST_COMMAND_RESULT, msgs
 
-    def getPortsWithQueue(queue_address):
+    @staticmethod
+    def _getPortsWithQueue( queue_address):
     	cmd = 'sudo dpctl unix:%s stats-queue' %queue_address
-    	result = quietRun( cmd )
+    	result = quietRun( cmd, shell=True)
     	result = re.findall('port="(\d+)", q="(\d+)",', result)
     	return result
 
-	def getQueueConfigs(portsList):
+    @staticmethod
+    def _getQueueConfigs( portsList):
 		result=[]
 		prev = -1
 		for port,queue_id in portsList:
@@ -675,11 +677,11 @@ class QoS(object):
                'details': 'unix socket is not set'}
             return REST_COMMAND_RESULT, msg
 
-        portsWithQueue = getPortsWithQueue(self.unix_socket)
+        portsWithQueue = self._getPortsWithQueue(self.unix_socket)
 
         if len(portsWithQueue):
             msg = {'result': 'success',
-                   'details': getQueueConfigs(portsWithQueue)}
+                   'details': self._getQueueConfigs(portsWithQueue)}
         else:
            msg = {'result': 'failure',
                    'details': 'Queue is not exists.'}
