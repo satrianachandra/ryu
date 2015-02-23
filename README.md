@@ -40,9 +40,9 @@ After writing your application, just type::
 
 | Endpoint | Description |
 | ---- | --------------- |
-| [PUT /v1.0/conf/switches/{SWITCH_ID}](/v3_resources/blocks.md#get-usersloginblocks) | Set switch address |
-| [POST /qos/queue/{SWITCH_ID}](/v3_resources/blocks.md#put-usersuserblockstarget) | Set QoS settings with data : port-name, queues: min-rate: |
-| [GET /qos/queue/{SWITCH_ID}](/v3_resources/blocks.md#delete-usersuserblockstarget) | Get all queues settings in the switch |
-| [DELETE /qos/queue/{SWITCH_ID}](/v3_resources/blocks.md#delete-usersuserblockstarget) | Delete all queues settings in the switch |
-| [DELETE /qos/queue/{SWITCH_ID}/{PORT}/{QUEUE_ID}](/v3_resources/blocks.md#delete-usersuserblockstarget) | Delete a specific queue |
+| [PUT /v1.0/conf/switches/{SWITCH_ID}](https://github.com/satrianachandra/ryu/wiki/REST-API-for-Ecology-Framework#put-confswitchesswitch_idunix_socket) | Set switch address |
+| [POST /qos/queue/{SWITCH_ID}](https://github.com/satrianachandra/ryu/wiki/REST-API-for-Ecology-Framework#post-qosqueueswitch_id) | Set QoS settings with data : port-name, queues: min-rate: |
+| [GET /qos/queue/{SWITCH_ID}](https://github.com/satrianachandra/ryu/wiki/REST-API-for-Ecology-Framework#get-qosqueueswitch_id) | Get all queues settings in the switch |
+| [DELETE /qos/queue/{SWITCH_ID}](https://github.com/satrianachandra/ryu/wiki/REST-API-for-Ecology-Framework#delete-qosqueueswitch_id) | Delete all queues settings in the switch |
+| [DELETE /qos/queue/{SWITCH_ID}/{PORT}/{QUEUE_ID}](https://github.com/satrianachandra/ryu/wiki/REST-API-for-Ecology-Framework#delete-qosqueueswitch_id) | Delete a specific queue |
 
