@@ -1,3 +1,4 @@
+#/bin
 ## REST API for of12softwitch QoS configuration
 
 import logging
@@ -29,8 +30,8 @@ from ryu.ofproto import ether
 from ryu.ofproto import inet
 
 
-from mininet.util import quietRun
-import subprocess
+import subprocess 
+from subprocess import Popen, PIPE
 
 # =============================
 #          REST API
@@ -566,7 +567,7 @@ class QoS(object):
         self.vlan_list[VLANID_NONE] = 0  # for VLAN=None
         self.dp = dp
         self.version = dp.ofproto.OFP_VERSION
-        self.queue_list = {}
+        
         self.CONF = CONF
 
         self.unix_socket = None
@@ -647,9 +648,12 @@ class QoS(object):
     @staticmethod
     def _getPortsWithQueue( queue_address):
     	cmd = 'sudo dpctl unix:%s stats-queue' %queue_address
-    	result = quietRun( cmd, shell=True)
-    	result = re.findall('port="(\d+)", q="(\d+)",', result)
-    	return result
+    	p = Popen([cmd],shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    	output,err = p.communicate()
+    	output = re.findall('port="(\d+)", q="(\d+)",', output)
+    	if err:
+    		print err
+    	return output
 
     @staticmethod
     def _getQueueConfigs( portsList):
@@ -658,13 +662,18 @@ class QoS(object):
 		for port,queue_id in portsList:
 			current = port
 			if (current != prev):
-				cmd = 'sudo dpctl unix:/tmp/s1 queue-get-config %d' %int(port)
-				cmdresult = quietRun(cmd)
-				cmdresult = re.findall('q="(\d+)", props=\[minrate\{rate="(\d+)"\}\]', cmdresult)
+				cmd = 'sudo /usr/local/bin/dpctl unix:/tmp/s1 queue-get-config %d' %int(port)
+				p = Popen([cmd],shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+				output,err = p.communicate()
+				if err:
+					print err
+				output = re.findall('q="(\d+)", props=\[minrate\{rate="(\d+)"\}\]', output)
+				print output
 				#build the json friendly here
 				anArray=[]
-				for queueID,minrate in cmdresult:
-					adict = {"queue_id":queue_id,"min_rate":minrate}
+				for queueID,minrate in output:
+					print 'queueID: ' + queueID
+					adict = {"queue_id":queueID,"min_rate":minrate}
 					anArray.append(adict)
 				result.append({"port_name": port, "queues":anArray})
 			prev = current
@@ -696,7 +705,7 @@ class QoS(object):
                'details': 'unix socket is not set'}
             return REST_COMMAND_RESULT, msg
 
-        self.queue_list.clear()
+        queue_list = {}
         queues = rest.get(REST_QUEUES, [])
         #queue_id = 1
         queue_config = []
@@ -716,17 +725,13 @@ class QoS(object):
                 config['min-rate'] = min_rate
             else:
             	raise ValueError('Required to specify min_rate\n')
-
             if queue_id is not None:
                 config['id'] = queue_id
             else:
             	raise ValueError('Required to specify queue id\n')
-
             if len(config):
                 queue_config.append(config)
-            config['port no.'] = port_name
-
-            self.queue_list[queue_id] = {'config': config}
+            queue_list[queue_id] = {'config': config}
             cmd = 'dpctl ' + 'unix:'+ self.unix_socket + ' queue-mod %s %s %s' % (port_name, queue_id, min_rate)
             #LOG.info(cmd)
             ret = subprocess.call(cmd, shell=True)
@@ -736,14 +741,15 @@ class QoS(object):
             
 
         msg = {'result': 'success',
-               'details': self.queue_list}
+               'details': queue_list}
 
         return REST_COMMAND_RESULT, msg
 
     def _delete_queue(self):
         
-        for queue_id in self.queue_list:
-            port_no = self.queue_list[queue_id]["config"]["port no."]
+    	queue_list = self._getPortsWithQueue(self.unix_socket)
+
+        for port_no, queue_id in queue_list:
             cmd = 'sudo dpctl ' + 'unix:' + self.unix_socket + ' queue-del %s %s' % (port_no, queue_id)
             ret = subprocess.call(cmd, shell=True)
             if ret != 0:
@@ -754,8 +760,7 @@ class QoS(object):
     @rest_command
     def delete_queue(self, rest, vlan_id):        
         if self._delete_queue():
-            self.queue_list.clear()
-            msg = 'success'
+            msg = 'success. All queues deleted'
         else:
             msg = 'failure'
 
