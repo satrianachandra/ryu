@@ -36,13 +36,13 @@ After writing your application, just type::
    % ryu-manager yourapp.py
 
 
-Support
-=======
-Ryu Official site is `<http://osrg.github.io/ryu/>`_.
+##REST API for Qos settings in CPQD ofsoftswitch
 
-If you have any
-questions, suggestions, and patches, the mailing list is available at
-`ryu-devel ML
-<https://lists.sourceforge.net/lists/listinfo/ryu-devel>`_.
-`The ML archive at Gmane <http://dir.gmane.org/gmane.network.ryu.devel>`_
-is also available.
+| Endpoint | Description |
+| ---- | --------------- |
+| [PUT /v1.0/conf/switches/{SWITCH_ID}](/v3_resources/blocks.md#get-usersloginblocks) | Set switch address |
+| [POST /qos/queue/{SWITCH_ID}](/v3_resources/blocks.md#put-usersuserblockstarget) | Set QoS settings with data : port-name, queues: min-rate: |
+| [GET /qos/queue/{SWITCH_ID}](/v3_resources/blocks.md#delete-usersuserblockstarget) | Get all queues settings in the switch |
+| [DELETE /qos/queue/{SWITCH_ID}](/v3_resources/blocks.md#delete-usersuserblockstarget) | Delete all queues settings in the switch |
+| [DELETE /qos/queue/{SWITCH_ID}/{PORT}/{QUEUE_ID}](/v3_resources/blocks.md#delete-usersuserblockstarget) | Delete a specific queue |
+
